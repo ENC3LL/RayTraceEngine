@@ -2,22 +2,24 @@
 #define HITTABLE_H
 
 #include "ray.h"
+#include <memory> // ВАЖНО: нужно для std::shared_ptr
+
+// Forward Declaration: говорим, что класс material существует
+class material;
 
 // Структура для хранения информации о попадании луча
 struct hit_record {
-    point3 p;      // Точка пересечения в 3D
-    vec3 normal;   // Нормаль в этой точке (куда смотрит поверхность)
-    double t;      // Дистанция от начала луча до точки p
+    point3 p;      
+    vec3 normal;
+    std::shared_ptr<material> mat_ptr; // Ссылка на материал
+    double t;      
 };
 
-// Абстрактный класс (интерфейс) для всех объектов сцены
+// Абстрактный класс
 class hittable {
 public:
-    // Виртуальный деструктор обязателен для базовых классов
     virtual ~hittable() = default;
 
-    // Чисто виртуальная функция (pure virtual)
-    // t_min и t_max ограничивают диапазон поиска (чтобы не рисовать объекты за спиной)
     virtual bool hit(const ray& r, double t_min, double t_max, hit_record& rec) const = 0;
 };
 

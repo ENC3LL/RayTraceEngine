@@ -1,53 +1,38 @@
 #include "ray.h"
+#include "vec3.h"
+#include "hittable_list.h" // Подключаем список
+#include "sphere.h"        // Подключаем сферы
+#include "rtweekend.h" // Наши утилиты
+#include "color.h"     // Вывод цвета
+#include "material.h"
+
 #include <iostream>
 #include <fstream>
 
 using namespace std;
 
-// --- НОВАЯ ФУНКЦИЯ ---
-bool hit_sphere(const point3& center, double radius, const ray& r) {
-    // Вектор от начала луча к центру сферы
-    vec3 oc = r.origin() - center;
-    
-    // Коэффициенты квадратного уравнения at^2 + bt + c = 0
-    // a = dot(dir, dir)
-    auto a = dot(r.direction(), r.direction());
-    // b = 2 * dot(oc, dir)
-    auto b = 2.0 * dot(oc, r.direction());
-    // c = dot(oc, oc) - r^2
-    auto c = dot(oc, oc) - radius * radius;
-    
-    // Считаем дискриминант
-    auto discriminant = b*b - 4*a*c;
-    
-    if (discriminant < 0) {
-        return -1.0; // Не попали
-    } else {
-        // Возвращаем ближайший корень (ближнюю стенку сферы)
-        // Формула: (-b - sqrt(D)) / 2a
-        return (-b - sqrt(discriminant)) / (2.0 * a);
-    }
-}
+color ray_color(const ray& r, const hittable& world, int depth) {
+    hit_record rec;
 
-// Обновленная функция цвета
-color ray_color(const ray& r) {
-    // Проверяем пересечение со сферой (центр 0,0,-1, радиус 0.5)
-    auto t = hit_sphere(point3(0, 0, -1), 0.5, r);
-    
-    if (t > 0.0) {
-        // 1. Находим точку пересечения
-        point3 N = r.at(t) - vec3(0, 0, -1);
+    if (depth <= 0)
+        return color(0,0,0);
+
+    // Если попали в объект
+    if (world.hit(r, 0.001, infinity, rec)) {
+        ray scattered;
+        color attenuation;
         
-        // 2. Нормализуем вектор (превращаем в единичный)
-        vec3 normal = unit_vector(N);
+        // Спрашиваем у материала объекта: "Как ты рассеиваешь свет?"
+        // Если материал говорит "рассеял" (true), продолжаем трассировку с новым лучом
+        if (rec.mat_ptr->scatter(r, rec, attenuation, scattered))
+            return attenuation * ray_color(scattered, world, depth - 1);
         
-        // 3. Переводим координаты (-1..1) в цвет (0..1)
-        return 0.5 * (color(normal.x()+1, normal.y()+1, normal.z()+1));
+        return color(0,0,0); // Если материал поглотил свет (черный)
     }
 
-    // Если не попали — рисуем фон (небо)
+    // Фон (небо)
     vec3 unit_direction = unit_vector(r.direction());
-    t = 0.5 * (unit_direction.y() + 1.0);
+    auto t = 0.5 * (unit_direction.y() + 1.0);
     return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
@@ -58,10 +43,30 @@ void write_color(ostream &out, color pixel_color) {
 }
 
 int main() {
+    // Параметры изображения
     const auto aspect_ratio = 16.0 / 9.0;
     const int image_width = 400;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
+    // Количество лучей на 1 пиксель (чем больше, тем глаже, но медленнее)
+    const int samples_per_pixel = 100;
+    const int max_depth = 50; // Максимальная глубина рекурсии (сколько раз луч может отскочить)
 
+    // Мир
+    hittable_list world;
+
+    // Материалы
+    auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0)); // Желтый матовый
+    auto material_center = make_shared<lambertian>(color(0.7, 0.3, 0.3)); // Красный матовый
+    auto material_left   = make_shared<metal>(color(0.8, 0.8, 0.8));      // Зеркальный (сталь)
+    auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2));      // Золотистый металл
+
+    // Объекты
+    world.add(make_shared<sphere>(point3( 0.0, -100.5, -1.0), 100.0, material_ground));
+    world.add(make_shared<sphere>(point3( 0.0,    0.0, -1.0),   0.5, material_center));
+    world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, material_left));
+    world.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
+
+    // Камера
     auto viewport_height = 2.0;
     auto viewport_width = aspect_ratio * viewport_height;
     auto focal_length = 1.0;
@@ -71,24 +76,32 @@ int main() {
     auto vertical = vec3(0, viewport_height, 0);
     auto lower_left_corner = origin - horizontal/2 - vertical/2 - vec3(0, 0, focal_length);
 
-    ofstream outFile("image.ppm");
+    std::ofstream outFile("image.ppm");
     outFile << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 
     for (int y = image_height - 1; y >= 0; --y) {
-        // clog замедляет, можно убрать или делать реже, если комп мощный
-        // clog << "\rScanlines remaining: " << y << ' ' << flush; 
+         // std::cerr - поток ошибок, обычно не буферизируется и выводится сразу
+        std::cerr << "\rScanlines remaining: " << y << ' ' << std::flush;
+        
         for (int x = 0; x < image_width; ++x) {
-            auto u = double(x) / (image_width - 1);
-            auto v = double(y) / (image_height - 1);
+            color pixel_color(0, 0, 0);
             
-            ray r(origin, lower_left_corner + u*horizontal + v*vertical - origin);
+                // --- СЭМПЛИНГ (Anti-Aliasing) ---
+                 // Пускаем много лучей в окрестности одного пикселя
+                for (int s = 0; s < samples_per_pixel; ++s) {
+                auto u = (double(x) + random_double()) / (image_width - 1);
+                auto v = (double(y) + random_double()) / (image_height - 1);
+                ray r(origin, lower_left_corner + u*horizontal + v*vertical - origin);
             
-            color pixel_color = ray_color(r);
-            write_color(outFile, pixel_color);
+                // ВАЖНО: передаем max_depth
+                pixel_color += ray_color(r, world, max_depth);
+            }
+            
+            // Записываем усредненный цвет
+            write_color(outFile, pixel_color, samples_per_pixel);
         }
     }
-    
-    // Сообщение о готовности в конце
-    clog << "\rDone.                 \n";
+
+    std::cerr << "\rDone.                 \n";
     outFile.close();
 }
