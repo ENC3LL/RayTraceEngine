@@ -1,0 +1,3 @@
+C:/Users/ENCELL/Documents/VSC Projects/RayTracer/build/CMakeFiles/RayTracer.dir
+C:/Users/ENCELL/Documents/VSC Projects/RayTracer/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/ENCELL/Documents/VSC Projects/RayTracer/build/CMakeFiles/ZERO_CHECK.dir

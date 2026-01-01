@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug RayTracer",
+            "type": "cppvsdbg",
+            "request": "launch",
+            // Важно: Путь к твоему EXE. 
+            // CMake при сборке MSVC часто кладет файл в подпапку Debug.
+            // Если не заработает, убери "/Debug" из пути.
+            "program": "${workspaceFolder}/build/Debug/RayTracer.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}", 
+            "environment": [],
+            // externalTerminal откроет отдельное черное окно консоли (как в играх)
+            // integratedTerminal оставит вывод внутри VS Code
+            "console": "externalTerminal"
+        }
+    ]
+}
